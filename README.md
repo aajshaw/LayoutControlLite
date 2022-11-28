@@ -8,7 +8,7 @@ with little experience of writing programms and to run on inexpensive hardware.
 ![turnout demo](simple_turnout.png)
 
 ```python
-from LayoutControlLite import Track, Stub, Turnout, Signal
+from LayoutControlLite import Track, Stub, Turnout, Signal, Layout
 
 # Define the individual items
 main = Track('Main Line', (25, 200), (1175, 200))
