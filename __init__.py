@@ -1,5 +1,5 @@
-__name__ = 'ControlPanelLite'
-__package__ = 'ControlPanelLite'
+__name__ = 'LayoutControlLite'
+__package__ = 'LayoutControlLite'
 __version__ = '0.1.0'
 __author__ = 'Anthony Shaw'
 
