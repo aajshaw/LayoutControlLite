@@ -233,7 +233,7 @@ class Signal:
             else:
                 raise StopIteration
 
-    def __init__(self, id, location, state = SIGNAL_DANGER, clear_color = None, danger_color = None):
+    def __init__(self, id, location, state = SIGNAL_DANGER, clear_color = None, danger_color = None, inform = None, respond = None):
         self.id = id
         self.location = location
         self.state = state
@@ -298,7 +298,7 @@ class Turnout:
             else:
                 raise StopIteration
 
-    def __init__(self, id, location, entry = None, normal = None, reverse = None, normal_color = None, safe_color = None, danger_color = None, point_color = None):
+    def __init__(self, id, location, entry = None, normal = None, reverse = None, normal_color = None, safe_color = None, danger_color = None, point_color = None, inform = None, respond = None):
         self.id = id
         self.location = location
         if normal_color is None:
@@ -442,7 +442,7 @@ class Block:
             item.erase()
 
 class Layout:
-    def __init__(self, label, label_font_size = 30, label_color = None, background_color = None, height = 300, width = 1200, clickable_panel = True, item_buttons = True, route_buttons = True, exit_button = True):
+    def __init__(self, label, label_font_size = 30, label_color = None, background_color = None, height = 300, width = 1200, clickable_panel = True, item_buttons = True, route_buttons = True, exit_button = True, informers = False, responders = False):
         self.label = label
         self.label_font_size = label_font_size
         if label_color is None:
