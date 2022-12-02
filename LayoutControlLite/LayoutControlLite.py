@@ -574,7 +574,7 @@ class Layout:
         for block in self.blocks:
             block.draw()
 
-if __name__ == '__main__':
+def Main():
     # from mimic_panel_express import Track, Stub, Turnout, Signal, Block, Route, Layout
 
 #    set_default('LAYOUT_BACKGROUND_COLOR', 'white')
@@ -644,3 +644,6 @@ if __name__ == '__main__':
     layout.add(goods_line)
 
     layout.run()
+
+if __name__ == '__main__':
+    Main()

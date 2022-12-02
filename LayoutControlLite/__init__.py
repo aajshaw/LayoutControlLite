@@ -10,3 +10,4 @@ from .LayoutControlLite import Turnout
 from .LayoutControlLite import Block
 from .LayoutControlLite import Route
 from .LayoutControlLite import Layout
+from .LayoutControlLite import Main
