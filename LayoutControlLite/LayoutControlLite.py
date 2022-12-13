@@ -6,6 +6,7 @@ TRACK_NORMAL = 2
 SIGNAL_DANGER = 0
 SIGNAL_CLEAR = 1
 
+TRACK_WIDTH = 5
 TRACK_NORMAL_COLOR = 'yellow'
 TRACK_SAFE_COLOR = 'yellow'
 TRACK_DANGER_COLOR = 'red'
@@ -20,7 +21,8 @@ TURNOUT_DANGER_COLOR = 'red'
 TURNOUT_POINT_COLOR = 'blue'
 BLOCK_LABEL_COLOR = 'blue'
 LAYOUT_LABEL_COLOR = 'blue'
-LAYOUT_BACKGROUND_COLOR = 'black'
+LAYOUT_BACKGROUND_COLOR = 'light gray'
+APPLICATION_THEME = 'LightGray2'
 
 def set_default(item, value):
     _item = item.upper()
@@ -69,6 +71,12 @@ def set_default(item, value):
     elif _item == 'LAYOUT_BACKGROUND_COLOR':
         global LAYOUT_BACKGROUND_COLOR
         LAYOUT_BACKGROUND_COLOR = value
+    elif _item == 'TRACK_WIDTH':
+        global TRACK_WIDTH
+        TRACK_WIDTH = value
+    elif _item == 'APPLICATION_THEME':
+        global APPLICATION_THEME
+        APPLICATION_THEME = value
     else:
         raise ValueError(f'Invalid item for setting of default value: item = {item}, value = {value}')
 
@@ -106,17 +114,6 @@ class Track:
 
     def __init__(self, id, start_location = None, end_location = None, state = TRACK_NORMAL, normal_color = None, safe_color = None, danger_color = None):
         self.id = id
-#        if start_location and end_location:
-#            if start_location <= end_location:
-#                self.start_location = start_location
-#                self.end_location = end_location
-#            else:
-#                self.start_location = end_location
-#                self.end_location = start_location
-#        else:
-#            # At least one of the points is not comparable, so just assign them
-#            self.start_location = start_location
-#            self.end_location = end_location
         self.start_location = start_location
         self.end_location = end_location
         self.state = state
@@ -160,7 +157,7 @@ class Track:
                 color = self.danger_color
             else:
                 color = self.danger_color
-            self.graph_id = self.panel.draw_line(self.start_location, self.end_location, color = color, width = 3)
+            self.graph_id = self.panel.draw_line(self.start_location, self.end_location, color = color, width = TRACK_WIDTH)
 
     def clicked(self, figures):
         pass
@@ -479,6 +476,8 @@ class Layout:
         screen_size = _get_screen_size()
         canvas_size = (screen_size[0] - 100, screen_size[1] - 250)
 
+        sg.theme(APPLICATION_THEME)
+
         buttons = []
         if self.item_buttons:
             item_buttons = []
@@ -575,9 +574,9 @@ class Layout:
             block.draw()
 
 def Main():
-    # from mimic_panel_express import Track, Stub, Turnout, Signal, Block, Route, Layout
+    # from LayoutControlLite import Track, Stub, Turnout, Signal, Block, Route, Layout
 
-#    set_default('LAYOUT_BACKGROUND_COLOR', 'white')
+#    set_default('LAYOUT_BACKGROUND_COLOR', 'black')
 
     west_entry_track = Track('West Entry', (25, 200), (75, 200))
     starter_signal = Signal('Starter', (75, 225))
