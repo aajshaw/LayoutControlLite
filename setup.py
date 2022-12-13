@@ -9,7 +9,7 @@ def readme():
 
 setuptools.setup(
     name="LayoutControlLite",
-    version="0.1.0",
+    version="0.2.0",
     author="Anthony Shaw",
     author_email="tony@adshaw.uk",
     description="Light weight, easy to use model railway layout control panel",
