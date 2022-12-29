@@ -15,11 +15,14 @@ STUB_SAFE_COLOR = 'yellow'
 STUB_DANGER_COLOR = 'red'
 SIGNAL_CLEAR_COLOR = 'green'
 SIGNAL_DANGER_COLOR = 'red'
+SIGNAL_GUI_BUTTON = True
 TURNOUT_NORMAL_COLOR = 'yellow'
 TURNOUT_SAFE_COLOR = 'green'
 TURNOUT_DANGER_COLOR = 'red'
 TURNOUT_POINT_COLOR = 'blue'
+TURNOUT_GUI_BUTTON = True
 BLOCK_LABEL_COLOR = 'blue'
+ROUTE_GUI_BUTTON = True
 LAYOUT_LABEL_COLOR = 'blue'
 LAYOUT_BACKGROUND_COLOR = 'light gray'
 APPLICATION_THEME = 'LightGray2'
@@ -50,6 +53,9 @@ def set_default(item, value):
     elif _item == 'SIGNAL_DANGER_COLOR':
         global SIGNAL_DANGER_COLOR
         SIGNAL_DANGER_COLOR = value
+    elif _item == 'SIGNAL_GUI_BUTTON':
+        global SIGNAL_GUI_BUTTON
+        SIGNAL_GUI_BUTTON = value
     elif _item == 'TURNOUT_NORMAL_COLOR':
         global TURNOUT_NORMAL_COLOR
         TURNOUT_NORMAL_COLOR = value
@@ -62,9 +68,15 @@ def set_default(item, value):
     elif _item == 'TURNOUT_POINT_COLOR':
         global TURNOUT_POINT_COLOR
         TURNOUT_POINT_COLOR = value
+    elif _item == 'TURNOUT_GUI_BUTTON':
+        global TURNOUT_GUI_BUTTON
+        TURNOUT_GUI_BUTTON = value
     elif _item == 'BLOCK_LABEL_COLOR':
         global BLOCK_LABEL_COLOR
         BLOCK_LABEL_COLOR = value
+    elif _item == 'ROUTE_GUI_BUTTON':
+        global ROUTE_GUI_BUTTON
+        ROUTE_GUI_BUTTON = value
     elif _item == 'LAYOUT_LABEL_COLOR':
         global LAYOUT_LABEL_COLOR
         LAYOUT_LABEL_COLOR = value
@@ -88,8 +100,12 @@ def _get_screen_size():
     return size
 
 class Route:
-    def __init__(self, id):
+    def __init__(self, id, gui_button = None):
         self.id = id
+        if gui_button is None:
+            self.gui_button = ROUTE_GUI_BUTTON
+        else:
+            self.gui_button = gui_button
         self.legs = []
 
     def add(self, leg, does):
@@ -230,7 +246,7 @@ class Signal:
             else:
                 raise StopIteration
 
-    def __init__(self, id, location, state = SIGNAL_DANGER, clear_color = None, danger_color = None, inform = None, respond = None):
+    def __init__(self, id, location, state = SIGNAL_DANGER, clear_color = None, danger_color = None, inform = None, respond = None, gui_button = None):
         self.id = id
         self.location = location
         self.state = state
@@ -242,6 +258,12 @@ class Signal:
             self.danger_color = SIGNAL_DANGER_COLOR
         else:
             self.danger_color = danger_color
+        if gui_button is None:
+            self.gui_button = SIGNAL_GUI_BUTTON
+        else:
+            self.gui_button = gui_button
+        self.inform = inform
+        self.respond = respond
         self.graph_id = None
         self.panel = None
 
@@ -295,7 +317,7 @@ class Turnout:
             else:
                 raise StopIteration
 
-    def __init__(self, id, location, entry = None, normal = None, reverse = None, normal_color = None, safe_color = None, danger_color = None, point_color = None, inform = None, respond = None):
+    def __init__(self, id, location, entry = None, normal = None, reverse = None, normal_color = None, safe_color = None, danger_color = None, point_color = None, inform = None, respond = None, gui_button = None):
         self.id = id
         self.location = location
         if normal_color is None:
@@ -323,6 +345,12 @@ class Turnout:
             self.point_color = TURNOUT_POINT_COLOR
         else:
             self.point_color = point_color
+        if gui_button is None:
+            self.gui_button = TURNOUT_GUI_BUTTON
+        else:
+            self.gui_button = gui_button
+        self.inform = inform
+        self.respond = respond
         self.point_circle_graph_id = None
         self.state = 'N'
         self.panel = None
@@ -482,11 +510,11 @@ class Layout:
         if self.item_buttons:
             item_buttons = []
             for block in self.blocks:
-                if isinstance(block, Turnout) or isinstance(block, Signal):
+                if (isinstance(block, Turnout) or isinstance(block, Signal)) and block.gui_button:
                     item_buttons.append(sg.Button(block.id, font = ('', 20), key = '+item+' + block.id))
                 else:
                     for item in block:
-                        if isinstance(item, Turnout) or isinstance(item, Signal):
+                        if (isinstance(item, Turnout) or isinstance(item, Signal)) and item.gui_button:
                             item_buttons.append(sg.Button(item.id, font = ('', 20), key = '+item+' + item.id))
             if len(item_buttons):
                 buttons.append(item_buttons)
@@ -494,7 +522,8 @@ class Layout:
         if self.route_buttons:
             route_buttons = []
             for route in self.routes:
-                route_buttons.append(sg.Button(route.id, font = ('', 20), key = '+route+' + route.id))
+                if route.gui_button:
+                    route_buttons.append(sg.Button(route.id, font = ('', 20), key = '+route+' + route.id))
             if len(route_buttons):
                 buttons.append(route_buttons)
         if self.exit_button:
