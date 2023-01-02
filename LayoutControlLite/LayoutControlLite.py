@@ -500,7 +500,7 @@ class Layout:
         else:
             self.add_block(item)
 
-    def run(self, initial_route = None):
+    def run(self, initial_route = None, full_screen = True):
         screen_size = _get_screen_size()
         canvas_size = (screen_size[0] - 100, screen_size[1] - 250)
 
@@ -534,7 +534,7 @@ class Layout:
         if self.item_buttons or self.route_buttons or self.exit_button:
             layout.append([sg.Column(buttons, expand_x = True, element_justification = 'center')])
 
-        window = sg.Window('Layout Control Lite', layout, size = screen_size, finalize = True, no_titlebar = True)
+        window = sg.Window('Layout Control Lite', layout, size = screen_size, finalize = True, no_titlebar = full_screen)
 
         panel = window['panel']
 
@@ -603,7 +603,7 @@ class Layout:
             block.draw()
 
 def Main():
-    # from LayoutControlLite import Track, Stub, Turnout, Signal, Block, Route, Layout
+    # from LayoutControlLite import Track, Stub, Turnout, Signal, Block, Route, Layout, set_default
 
 #    set_default('LAYOUT_BACKGROUND_COLOR', 'black')
 
