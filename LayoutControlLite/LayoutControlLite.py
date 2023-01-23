@@ -1,7 +1,7 @@
 from datetime import timedelta, datetime as dt
 import PySimpleGUI as sg
 try:
-    from gpiozero import Button
+    from gpiozero import Button # pyright: ignore [reportMissingImports]
 except:
     class Button:
         def __init__(self, pin_id, *args):
