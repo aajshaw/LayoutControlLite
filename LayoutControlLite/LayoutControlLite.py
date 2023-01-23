@@ -1,4 +1,12 @@
+from datetime import timedelta, datetime as dt
 import PySimpleGUI as sg
+try:
+    from gpiozero import Button
+except:
+    class Button:
+        def __init__(self, pin_id, *args):
+            self.pin_id = pin_id
+            self.args = args
 
 TRACK_SAFE = 1
 TRACK_DANGER = 0
@@ -99,13 +107,40 @@ def _get_screen_size():
     window.close()
     return size
 
+class PushButton(Button):
+    PUSH_DEBOUNCE = timedelta(seconds = 0.25)
+
+    def __init__(self, button_id, pin_id, callback):
+        '''
+        The pin ID should be a GPIO pin number
+        '''
+        super().__init__(pin_id, bounce_time = None)
+        self.button_id = button_id
+        self.callback = callback
+        self.last_push = dt.now()
+        self.when_pressed = self.pushed
+    
+    def pushed(self):
+        now = dt.now()
+        if now - self.last_push >= PushButton.PUSH_DEBOUNCE:
+            self.last_push = now
+            if self.callback:
+                self.callback()
+
 class Route:
-    def __init__(self, id, gui_button = None):
+    def __init__(self, id, gui_button = None, push_button = None, keyboard_event = None):
         self.id = id
         if gui_button is None:
             self.gui_button = ROUTE_GUI_BUTTON
         else:
             self.gui_button = gui_button
+        if isinstance(push_button, int):
+            self.push_button = PushButton(button_id = id, pin_id = push_button, callback = self.run)
+        elif isinstance(push_button, PushButton):
+            self.push_button = push_button
+        else:
+            self.push_button = None
+        self.keyboard_event = keyboard_event
         self.legs = []
 
     def add(self, leg, does):
@@ -246,7 +281,7 @@ class Signal:
             else:
                 raise StopIteration
 
-    def __init__(self, id, location, state = SIGNAL_DANGER, clear_color = None, danger_color = None, inform = None, respond = None, gui_button = None):
+    def __init__(self, id, location, state = SIGNAL_DANGER, clear_color = None, danger_color = None, inform = None, respond = None, gui_button = None, push_button = None, keyboard_event = None):
         self.id = id
         self.location = location
         self.state = state
@@ -262,6 +297,13 @@ class Signal:
             self.gui_button = SIGNAL_GUI_BUTTON
         else:
             self.gui_button = gui_button
+        if isinstance(push_button, int):
+            self.push_button = PushButton(button_id = id, pin_id = push_button, callback = self.toggle)
+        elif isinstance(push_button, PushButton):
+            self.push_button = push_button
+        else:
+            self.push_button = None
+        self.keyboard_event = keyboard_event
         self.inform = inform
         self.respond = respond
         self.graph_id = None
@@ -317,7 +359,7 @@ class Turnout:
             else:
                 raise StopIteration
 
-    def __init__(self, id, location, entry = None, normal = None, reverse = None, normal_color = None, safe_color = None, danger_color = None, point_color = None, inform = None, respond = None, gui_button = None):
+    def __init__(self, id, location, entry = None, normal = None, reverse = None, normal_color = None, safe_color = None, danger_color = None, point_color = None, inform = None, respond = None, gui_button = None, push_button = None, keyboard_event = None):
         self.id = id
         self.location = location
         if normal_color is None:
@@ -349,6 +391,13 @@ class Turnout:
             self.gui_button = TURNOUT_GUI_BUTTON
         else:
             self.gui_button = gui_button
+        if isinstance(push_button, int):
+            self.push_button = PushButton(button_id = id, pin_id = push_button, callback = self.toggle)
+        elif isinstance(push_button, PushButton):
+            self.push_button = push_button
+        else:
+            self.push_button = None
+        self.keyboard_event = keyboard_event
         self.inform = inform
         self.respond = respond
         self.point_circle_graph_id = None
@@ -499,8 +548,22 @@ class Layout:
             self.add_route(item)
         else:
             self.add_block(item)
+    
+    def _make_block_buttons(blocks, block_buttons):
+        for block in blocks:
+            if isinstance(block, Block):
+                Layout._make_block_buttons(block, block_buttons)
+            elif (isinstance(block, Turnout) or isinstance(block, Signal)) and block.gui_button:
+                block_buttons.append(sg.Button(block.id, font = ('', 20), key = '+item+' + block.id))
+    
+    def _make_block_keyboard_events(blocks, events):
+        for block in blocks:
+            if isinstance(block, Block):
+                Layout._make_block_keyboard_events(block, events)
+            elif (isinstance(block, Turnout) or isinstance(block, Signal)) and block.keyboard_event:
+                events[block.keyboard_event] = block.toggle
 
-    def run(self, initial_route = None, full_screen = True):
+    def run(self, initial_route = None, full_screen = True, enable_keyboard = False):
         screen_size = _get_screen_size()
         canvas_size = (screen_size[0] - 100, screen_size[1] - 250)
 
@@ -508,16 +571,10 @@ class Layout:
 
         buttons = []
         if self.item_buttons:
-            item_buttons = []
-            for block in self.blocks:
-                if (isinstance(block, Turnout) or isinstance(block, Signal)) and block.gui_button:
-                    item_buttons.append(sg.Button(block.id, font = ('', 20), key = '+item+' + block.id))
-                else:
-                    for item in block:
-                        if (isinstance(item, Turnout) or isinstance(item, Signal)) and item.gui_button:
-                            item_buttons.append(sg.Button(item.id, font = ('', 20), key = '+item+' + item.id))
-            if len(item_buttons):
-                buttons.append(item_buttons)
+            block_buttons = []
+            Layout._make_block_buttons(self.blocks, block_buttons)
+            if len(block_buttons):
+                buttons.append(block_buttons)
 
         if self.route_buttons:
             route_buttons = []
@@ -529,12 +586,19 @@ class Layout:
         if self.exit_button:
             buttons.append([sg.Button('Exit', font = ('', 20))])
 
+        keyboard_events = {}
+        if enable_keyboard:
+            Layout._make_block_keyboard_events(self.blocks, keyboard_events)
+            for route in self.routes:
+                if route.keyboard_event:
+                    keyboard_events[route.keyboard_event] = route.run
+
         layout = [ [sg.Text(self.label, font = ('', self.label_font_size), justification = 'center', expand_x = True)],
                    [sg.Graph(canvas_size = canvas_size, graph_bottom_left = (0, 0), graph_top_right = (self.width, self.height), background_color = self.background_color, enable_events = True, key = 'panel', expand_x = True)] ]
         if self.item_buttons or self.route_buttons or self.exit_button:
             layout.append([sg.Column(buttons, expand_x = True, element_justification = 'center')])
 
-        window = sg.Window('Layout Control Lite', layout, size = screen_size, finalize = True, no_titlebar = full_screen)
+        window = sg.Window('Layout Control Lite', layout, size = screen_size, finalize = True, no_titlebar = full_screen, return_keyboard_events = enable_keyboard)
 
         panel = window['panel']
 
@@ -586,6 +650,11 @@ class Layout:
                                     item.toggle()
                                     done = True
                         if done:
+                            break
+                else:
+                    for keyboard_event in keyboard_events:
+                        if keyboard_event == event:
+                            keyboard_events[keyboard_event]()
                             break
         window.close()
 
