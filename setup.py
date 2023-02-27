@@ -9,16 +9,16 @@ def readme():
 
 setuptools.setup(
     name="LayoutControlLite",
-    version="0.3.0",
+    version="0.4.0",
     author="Anthony Shaw",
     author_email="tony@adshaw.uk",
-    description="Light weight, easy to use model railway layout control panel",
+    description="Light weight, easy to use model railway layout control",
     long_description=readme(),
     long_description_content_type="text/markdown",
     keywords="model railway control panel lite",
     url="https://github.com/aajshaw/LayoutControlLite",
     packages=setuptools.find_packages(),
-    install_requires=['pysimplegui',],
+    install_requires=['pysimplegui', 'get-key', 'networkzero'],
     classifiers=(
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3.4",

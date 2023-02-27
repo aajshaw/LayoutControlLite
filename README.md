@@ -1,9 +1,11 @@
 # LayoutControlLite
-LayoutControlLite is a Python 3 library to enable schematic railway layouts to created with
+LayoutControlLite is a Python 3 library to enable the creation of schematic railway layouts with
 a mimimum of coding.
 
 The main aims of this project is to enable the deveoppment of layout control panels by people
 with little experience of writing programms and to run on inexpensive hardware.
+
+This example is produced by a short Python program
 
 ![turnout demo](simple_turnout.png)
 

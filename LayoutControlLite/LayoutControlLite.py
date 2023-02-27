@@ -1,12 +1,15 @@
 from datetime import timedelta, datetime as dt
+from getkey import getkey, keys
 import PySimpleGUI as sg
+import networkzero as nw0
 try:
     from gpiozero import Button # pyright: ignore [reportMissingImports]
 except:
     class Button:
-        def __init__(self, pin_id, *args):
+        def __init__(self, pin_id, **kwargs):
             self.pin_id = pin_id
-            self.args = args
+            self.kwargs = kwargs
+            print('Pseudo GPIOZERO button on pin', pin_id)
 
 TRACK_SAFE = 1
 TRACK_DANGER = 0
@@ -24,16 +27,20 @@ STUB_DANGER_COLOR = 'red'
 SIGNAL_CLEAR_COLOR = 'green'
 SIGNAL_DANGER_COLOR = 'red'
 SIGNAL_GUI_BUTTON = True
+SIGNAL_WAIT_FOR_SET = False
 TURNOUT_NORMAL_COLOR = 'yellow'
 TURNOUT_SAFE_COLOR = 'green'
 TURNOUT_DANGER_COLOR = 'red'
 TURNOUT_POINT_COLOR = 'blue'
 TURNOUT_GUI_BUTTON = True
+TURNOUT_WAIT_FOR_SET = False
 BLOCK_LABEL_COLOR = 'blue'
 ROUTE_GUI_BUTTON = True
 LAYOUT_LABEL_COLOR = 'blue'
 LAYOUT_BACKGROUND_COLOR = 'light gray'
 APPLICATION_THEME = 'LightGray2'
+
+_supervisors = {}
 
 def set_default(item, value):
     _item = item.upper()
@@ -64,6 +71,9 @@ def set_default(item, value):
     elif _item == 'SIGNAL_GUI_BUTTON':
         global SIGNAL_GUI_BUTTON
         SIGNAL_GUI_BUTTON = value
+    elif _item == 'SIGNAL_WAIT_FOR_SET':
+        global SIGNAL_WAIT_FOR_SET
+        SIGNAL_WAIT_FOR_SET = value
     elif _item == 'TURNOUT_NORMAL_COLOR':
         global TURNOUT_NORMAL_COLOR
         TURNOUT_NORMAL_COLOR = value
@@ -79,6 +89,9 @@ def set_default(item, value):
     elif _item == 'TURNOUT_GUI_BUTTON':
         global TURNOUT_GUI_BUTTON
         TURNOUT_GUI_BUTTON = value
+    elif _item == 'TURNOUT_WAIT_FOR_SET':
+        global TURNOUT_WAIT_FOR_SET
+        TURNOUT_WAIT_FOR_SET = value
     elif _item == 'BLOCK_LABEL_COLOR':
         global BLOCK_LABEL_COLOR
         BLOCK_LABEL_COLOR = value
@@ -208,21 +221,25 @@ class Track:
                 color = self.danger_color
             else:
                 color = self.danger_color
-            self.graph_id = self.panel.draw_line(self.start_location, self.end_location, color = color, width = TRACK_WIDTH)
+            if self.panel:
+                self.graph_id = self.panel.draw_line(self.start_location, self.end_location, color = color, width = TRACK_WIDTH)
 
     def clicked(self, figures):
         pass
 
     def erase(self):
-        self.panel.delete_figure(self.graph_id)
+        if self.panel:
+            self.panel.delete_figure(self.graph_id)
 
     def safe(self):
         self.state = TRACK_SAFE
-        self.panel.tk_canvas.itemconfigure(self.graph_id, fill = self.safe_color)
+        if self.panel:
+            self.panel.tk_canvas.itemconfigure(self.graph_id, fill = self.safe_color)
 
     def danger(self):
         self.state = TRACK_DANGER
-        self.panel.tk_canvas.itemconfigure(self.graph_id, fill = self.danger_color)
+        if self.panel:
+            self.panel.tk_canvas.itemconfigure(self.graph_id, fill = self.danger_color)
 
 class Stub:
     class _Iterator:
@@ -281,7 +298,7 @@ class Signal:
             else:
                 raise StopIteration
 
-    def __init__(self, id, location, state = SIGNAL_DANGER, clear_color = None, danger_color = None, inform = None, respond = None, gui_button = None, push_button = None, keyboard_event = None):
+    def __init__(self, id, location, state = SIGNAL_DANGER, clear_color = None, danger_color = None, inform = None, respond = None, gui_button = None, push_button = None, keyboard_event = None, supervisor = None, wait_for_set = None):
         self.id = id
         self.location = location
         self.state = state
@@ -303,7 +320,24 @@ class Signal:
             self.push_button = push_button
         else:
             self.push_button = None
+        if wait_for_set is None:
+            self.wait_for_set = SIGNAL_WAIT_FOR_SET
+        else:
+            self.wait_for_set = wait_for_set
         self.keyboard_event = keyboard_event
+        self.supervisor = supervisor
+        if self.supervisor:
+            if self.supervisor not in _supervisors:
+                sv = nw0.discover(self.supervisor)
+                if sv is None:
+                    sg.popup_error('Unable to discover supervisor ' + self.supervisor, title = 'No supervisor found')
+                    exit()
+                else:
+                    _supervisors[self.supervisor] = sv
+            status = nw0.send_message_to(_supervisors[self.supervisor], 'exists:signal:' + self.id)
+            if status != 'ok':
+                sg.popup_error("Signal '" + self.id + "' does not exist on Supervisor " + self.supervisor, title = 'Non-existant Signal')
+                exit()
         self.inform = inform
         self.respond = respond
         self.graph_id = None
@@ -312,13 +346,45 @@ class Signal:
     def __iter__(self):
         return self._Iterator()
 
+    def _supervisor_set(self, position):
+        if self.supervisor:
+            status = nw0.send_message_to(_supervisors[self.supervisor], 'set:signal:' + self.id + ':' + position)
+            if status == 'ok':
+                while self.wait_for_set:
+                    status = nw0.send_message_to(_supervisors[self.supervisor], 'status:signal:' + self.id)
+                    response = status.split(':')
+                    if response[0] == 'set':
+                        break
+                    elif response[0] == 'moving':
+                        continue
+                    else:
+                        sg.popup_error(status, 'Error getting status of signal ' + self.id, title = 'Status error')
+                        return False
+                return True
+            else:
+                sg.popup_error(status, 'Error setting signal ' + self.id + ' to ' + position, title = 'Error setting signal')
+                return False
+        else:
+            return True
+
+    def set_supervisor_state(self):
+        if self.supervisor:
+            if self.state == SIGNAL_DANGER:
+                self.danger()
+            elif self.state == SIGNAL_CLEAR:
+                self.clear()
+
     def clear(self):
-        self.state = SIGNAL_CLEAR
-        self.panel.tk_canvas.itemconfigure(self.graph_id, fill = self.clear_color, outline = self.clear_color)
+        if self._supervisor_set('clear'):
+            self.state = SIGNAL_CLEAR
+            if self.panel:
+                self.panel.tk_canvas.itemconfigure(self.graph_id, fill = self.clear_color, outline = self.clear_color)
 
     def danger(self):
-        self.state = SIGNAL_DANGER
-        self.panel.tk_canvas.itemconfigure(self.graph_id, fill = self.danger_color, outline = self.danger_color)
+        if self._supervisor_set('danger'):
+            self.state = SIGNAL_DANGER
+            if self.panel:
+                self.panel.tk_canvas.itemconfigure(self.graph_id, fill = self.danger_color, outline = self.danger_color)
 
     def toggle(self):
         if self.state == SIGNAL_CLEAR:
@@ -337,14 +403,16 @@ class Signal:
                 color = self.clear_color
             else:
                 color = self.danger_color
-            self.graph_id = self.panel.draw_circle(self.location, 10, fill_color = color, line_color = color)
+            if self.panel:
+                self.graph_id = self.panel.draw_circle(self.location, 10, fill_color = color, line_color = color)
 
     def clicked(self, figures):
         if self.graph_id in figures:
             self.toggle()
 
     def erase(self):
-        self.panel.delete_figure(self.graph_id)
+        if self.panel:
+            self.panel.delete_figure(self.graph_id)
 
 class Turnout:
     class _Iterator:
@@ -359,7 +427,7 @@ class Turnout:
             else:
                 raise StopIteration
 
-    def __init__(self, id, location, entry = None, normal = None, reverse = None, normal_color = None, safe_color = None, danger_color = None, point_color = None, inform = None, respond = None, gui_button = None, push_button = None, keyboard_event = None):
+    def __init__(self, id, location, entry = None, normal = None, reverse = None, normal_color = None, safe_color = None, danger_color = None, point_color = None, inform = None, respond = None, gui_button = None, push_button = None, keyboard_event = None, supervisor = None, wait_for_set = None):
         self.id = id
         self.location = location
         if normal_color is None:
@@ -397,7 +465,24 @@ class Turnout:
             self.push_button = push_button
         else:
             self.push_button = None
+        if wait_for_set is None:
+            self.wait_for_set = TURNOUT_WAIT_FOR_SET
+        else:
+            self.wait_for_set = wait_for_set
         self.keyboard_event = keyboard_event
+        self.supervisor = supervisor
+        if self.supervisor:
+            if self.supervisor not in _supervisors:
+                sv = nw0.discover(self.supervisor)
+                if sv is None:
+                    sg.popup_error('Unable to discover supervisor ' + self.supervisor, title = 'No supervisor found')
+                    exit()
+                else:
+                    _supervisors[self.supervisor] = sv
+            status = nw0.send_message_to(_supervisors[self.supervisor], 'exists:turnout:' + self.id)
+            if status != 'ok':
+                sg.popup_error("Turnout '" + self.id + "' does not exist on Supervisor " + self.supervisor, title = 'Non-existant turnout')
+                exit()
         self.inform = inform
         self.respond = respond
         self.point_circle_graph_id = None
@@ -406,6 +491,37 @@ class Turnout:
 
     def __iter__(self):
         return self._Iterator()
+    
+    def _supervisor_set(self, position):
+        if self.supervisor:
+            self.normal_track.danger()
+            self.reverse_track.danger()
+            self.state = 'I' # Indeterminate
+            status = nw0.send_message_to(_supervisors[self.supervisor], 'set:turnout:' + self.id + ':' + position)
+            if status == 'ok':
+                while self.wait_for_set:
+                    status = nw0.send_message_to(_supervisors[self.supervisor], 'status:turnout:' + self.id)
+                    response = status.split(':')
+                    if response[0] == 'set':
+                        break
+                    elif response[0] == 'moving':
+                        continue
+                    else:
+                        sg.popup_error(status, 'Error getting status of turnout ' + self.id, title = 'Status error')
+                        return False
+                return True
+            else:
+                sg.popup_error(status, 'Error setting turnout ' + self.id + ' to ' + position, title = 'Error setting turnout')
+                return False
+        else:
+            return True
+    
+    def set_supervisor_state(self):
+        if self.supervisor:
+            if self.state == 'N':
+                self.normal()
+            elif self.state == 'R':
+                self.reverse()
 
     def get_entry_location(self):
         return self.entry_location
@@ -417,14 +533,16 @@ class Turnout:
         return self.reverse_location
 
     def normal(self):
-        self.normal_track.safe()
-        self.reverse_track.danger()
-        self.state = 'N'
+        if self._supervisor_set('normal'):
+            self.normal_track.safe()
+            self.reverse_track.danger()
+            self.state = 'N'
 
     def reverse(self):
-        self.normal_track.danger()
-        self.reverse_track.safe()
-        self.state = 'R'
+        if self._supervisor_set('reverse'):
+            self.normal_track.danger()
+            self.reverse_track.safe()
+            self.state = 'R'
 
     def toggle(self):
         if self.state == 'R':
@@ -442,7 +560,8 @@ class Turnout:
         self.entry_track.draw()
         self.normal_track.draw()
         self.reverse_track.draw()
-        self.point_circle_graph_id = self.panel.draw_circle(self.location, 10, fill_color = self.point_color, line_color = self.point_color)
+        if self.panel:
+            self.point_circle_graph_id = self.panel.draw_circle(self.location, 10, fill_color = self.point_color, line_color = self.point_color)
 
     def clicked(self, figures):
         if self.point_circle_graph_id in figures or self.entry_track.get_graph_id() in figures or self.normal_track.get_graph_id() in figures or self.reverse_track.get_graph_id() in figures:
@@ -452,7 +571,8 @@ class Turnout:
         self.entry_track.erase()
         self.normal_track.erase()
         self.reverse_track.erase()
-        self.panel.delete_figure(self.point_circle)
+        if self.panel:
+            self.panel.delete_figure(self.point_circle)
 
 class Block:
     class _Iterator:
@@ -502,7 +622,7 @@ class Block:
             item.set_panel(panel)
 
     def draw(self):
-        if self.label:
+        if self.label and self.panel:
             self.panel.draw_text(self.label, self.label_location, color = self.label_color, font = ('', self.label_font_size))
         for item in self.items:
             item.draw()
@@ -562,101 +682,144 @@ class Layout:
                 Layout._make_block_keyboard_events(block, events)
             elif (isinstance(block, Turnout) or isinstance(block, Signal)) and block.keyboard_event:
                 events[block.keyboard_event] = block.toggle
+    
+    def _update_supervisors(blocks):
+        for block in blocks:
+            if isinstance(block, Block):
+                Layout._update_supervisors(block)
+            elif isinstance(block, Turnout) or isinstance(block, Signal):
+                block.set_supervisor_state()
 
-    def run(self, initial_route = None, full_screen = True, enable_keyboard = False):
-        screen_size = _get_screen_size()
-        canvas_size = (screen_size[0] - 100, screen_size[1] - 250)
-
-        sg.theme(APPLICATION_THEME)
-
-        buttons = []
-        if self.item_buttons:
-            block_buttons = []
-            Layout._make_block_buttons(self.blocks, block_buttons)
-            if len(block_buttons):
-                buttons.append(block_buttons)
-
-        if self.route_buttons:
-            route_buttons = []
-            for route in self.routes:
-                if route.gui_button:
-                    route_buttons.append(sg.Button(route.id, font = ('', 20), key = '+route+' + route.id))
-            if len(route_buttons):
-                buttons.append(route_buttons)
-        if self.exit_button:
-            buttons.append([sg.Button('Exit', font = ('', 20))])
-
+    def run(self, initial_route = None, full_screen = True, headless = False, enable_keyboard = False, close_all_supervisors = True):
         keyboard_events = {}
+        
         if enable_keyboard:
             Layout._make_block_keyboard_events(self.blocks, keyboard_events)
             for route in self.routes:
                 if route.keyboard_event:
                     keyboard_events[route.keyboard_event] = route.run
 
-        layout = [ [sg.Text(self.label, font = ('', self.label_font_size), justification = 'center', expand_x = True)],
-                   [sg.Graph(canvas_size = canvas_size, graph_bottom_left = (0, 0), graph_top_right = (self.width, self.height), background_color = self.background_color, enable_events = True, key = 'panel', expand_x = True)] ]
-        if self.item_buttons or self.route_buttons or self.exit_button:
-            layout.append([sg.Column(buttons, expand_x = True, element_justification = 'center')])
-
-        window = sg.Window('Layout Control Lite', layout, size = screen_size, finalize = True, no_titlebar = full_screen, return_keyboard_events = enable_keyboard)
-
-        panel = window['panel']
-
-        for block in self.blocks:
-            block.set_panel(panel)
-
-        for block in self.blocks:
-            block.draw()
-
-        # initial_route can be either a Route or a string ID of a route
-        if initial_route:
-            if isinstance(initial_route, Route):
-                initial_route.run()
-            else:
-                for route in self.routes:
-                    if route.id == initial_route:
-                        route.run()
-                        break
-
-        while True:
-            event, values = window.read()
-            if event == sg.WIN_CLOSED:
-                break
-            if event == 'Exit':
-                break
-            if event == 'panel' and self.clickable_panel:
-                figures = window['panel'].get_figures_at_location(values['panel'])
-                if len(figures):
-                    for block in self.blocks:
-                        block.clicked(figures)
-            else:
-                if event.startswith('+route+'):
-                    route_id = event[7:]
+        if headless:
+            # initial_route can be either a Route or a string ID of a route
+            if initial_route:
+                if isinstance(initial_route, Route):
+                    initial_route.run()
+                else:
                     for route in self.routes:
-                        if route.id == route_id:
+                        if route.id == initial_route:
                             route.run()
                             break
-                elif event.startswith('+item+'):
-                    item_id = event[6:]
-                    done = False
-                    for block in self.blocks:
-                        if isinstance(block, Turnout) or isinstance(block, Signal):
-                            if block.id == item_id:
-                                block.toggle()
-                                done = True
-                        else:
-                            for item in block:
-                                if item.id == item_id:
-                                    item.toggle()
-                                    done = True
-                        if done:
-                            break
+            
+            # At this stage everything is ready so make sure all supervisors are in step
+            Layout._update_supervisors(self.blocks)
+
+            # Need to pause here so that push buttons and whatever else can be processed until shutdown
+            print('Running ' + self.label + ', press enter to quit...')
+            while True:
+                event = getkey()
+                print('event', event)
+                if event == keys.ENTER:
+                    break
                 else:
                     for keyboard_event in keyboard_events:
                         if keyboard_event == event:
                             keyboard_events[keyboard_event]()
                             break
-        window.close()
+        else:
+            screen_size = _get_screen_size()
+            canvas_size = (screen_size[0] - 100, screen_size[1] - 250)
+
+            sg.theme(APPLICATION_THEME)
+
+            buttons = []
+            if self.item_buttons:
+                block_buttons = []
+                Layout._make_block_buttons(self.blocks, block_buttons)
+                if len(block_buttons):
+                    buttons.append(block_buttons)
+
+            if self.route_buttons:
+                route_buttons = []
+                for route in self.routes:
+                    if route.gui_button:
+                        route_buttons.append(sg.Button(route.id, font = ('', 20), key = '+route+' + route.id))
+                if len(route_buttons):
+                    buttons.append(route_buttons)
+            if self.exit_button:
+                buttons.append([sg.Button('Exit', font = ('', 20))])
+
+            layout = [ [sg.Text(self.label, font = ('', self.label_font_size), justification = 'center', expand_x = True)],
+                    [sg.Graph(canvas_size = canvas_size, graph_bottom_left = (0, 0), graph_top_right = (self.width, self.height), background_color = self.background_color, enable_events = True, key = 'panel', expand_x = True)] ]
+            if self.item_buttons or self.route_buttons or self.exit_button:
+                layout.append([sg.Column(buttons, expand_x = True, element_justification = 'center')])
+
+            window = sg.Window('Layout Control Lite', layout, size = screen_size, finalize = True, no_titlebar = full_screen, return_keyboard_events = enable_keyboard)
+
+            panel = window['panel']
+
+            for block in self.blocks:
+                block.set_panel(panel)
+
+            for block in self.blocks:
+                block.draw()
+
+            # initial_route can be either a Route or a string ID of a route
+            if initial_route:
+                if isinstance(initial_route, Route):
+                    initial_route.run()
+                else:
+                    for route in self.routes:
+                        if route.id == initial_route:
+                            route.run()
+                            break
+            
+            # At this stage everything is ready to display on the screen, so make sure all supervisors
+            # are in step with what we are about to show
+            Layout._update_supervisors(self.blocks)
+
+            while True:
+                event, values = window.read()
+                if event == sg.WIN_CLOSED:
+                    break
+                if event == 'Exit':
+                    break
+                if event == 'panel' and self.clickable_panel:
+                    figures = window['panel'].get_figures_at_location(values['panel'])
+                    if len(figures):
+                        for block in self.blocks:
+                            block.clicked(figures)
+                else:
+                    if event.startswith('+route+'):
+                        route_id = event[7:]
+                        for route in self.routes:
+                            if route.id == route_id:
+                                route.run()
+                                break
+                    elif event.startswith('+item+'):
+                        item_id = event[6:]
+                        done = False
+                        for block in self.blocks:
+                            if isinstance(block, Turnout) or isinstance(block, Signal):
+                                if block.id == item_id:
+                                    block.toggle()
+                                    done = True
+                            else:
+                                for item in block:
+                                    if item.id == item_id:
+                                        item.toggle()
+                                        done = True
+                            if done:
+                                break
+                    else:
+                        for keyboard_event in keyboard_events:
+                            if keyboard_event == event:
+                                keyboard_events[keyboard_event]()
+                                break
+            window.close()
+
+        if close_all_supervisors:
+            for supervisor in _supervisors:
+                nw0.send_message_to(_supervisors[supervisor], 'shutdown')
 
     def __getitem__(self, key):
         return self.find_element(key)
