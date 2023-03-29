@@ -1,5 +1,6 @@
 import networkzero as nw0
 from time import sleep, time as ticks_ms
+# Raspberry Pi: pip install adafruit-circuitpython-servokit
 try:
     from adafruit_servokit import ServoKit
 except:

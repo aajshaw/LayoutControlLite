@@ -811,8 +811,17 @@ class Layout:
                             if done:
                                 break
                     else:
+                        # On a Raspberry Pi we get event.keysym and event.keycode rather than event.char from
+                        # the underlaying tkinter event, this is normalised to a single keyboard character if
+                        # we are not given a single keyboard character
+                        if len(event) == 1:
+                            kb_char = event
+                        elif len(event) == 3:
+                            kb_char = event[0:1]
+                        else:
+                            kb_char = ''
                         for keyboard_event in keyboard_events:
-                            if keyboard_event == event:
+                            if keyboard_event == kb_char:
                                 keyboard_events[keyboard_event]()
                                 break
             window.close()
