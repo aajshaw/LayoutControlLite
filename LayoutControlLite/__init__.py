@@ -1,6 +1,6 @@
 __name__ = 'LayoutControlLite'
 __package__ = 'LayoutControlLite'
-__version__ = '0.4.0'
+__version__ = '0.5.0'
 __author__ = 'Anthony Shaw'
 
 from .LayoutControlLite import Signal
