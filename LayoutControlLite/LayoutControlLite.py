@@ -816,7 +816,7 @@ class Layout:
                         # we are not given a single keyboard character
                         if len(event) == 1:
                             kb_char = event
-                        elif len(event) == 3:
+                        elif len(event) >= 3 and event[1:2] == ':':
                             kb_char = event[0:1]
                         else:
                             kb_char = ''
