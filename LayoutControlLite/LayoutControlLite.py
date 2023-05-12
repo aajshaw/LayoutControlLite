@@ -614,7 +614,10 @@ class Block:
         raise KeyError(key)
 
     def add(self, item):
-        self.items.append(item)
+        if isinstance(item, (Block, Track, Stub, Turnout, Signal)):
+            self.items.append(item)
+        else:
+            raise TypeError(f'Attempt to add a \'{type(item).__name__}\' to a block. Valid types are Block, Track, Stub, Turnout or Signal. Revise your code so that one of the correct types is added')
 
     def set_panel(self, panel):
         self.panel = panel
@@ -658,16 +661,25 @@ class Layout:
         self.panel = None
 
     def add_block(self, block):
-        self.blocks.append(block)
+        if isinstance(block, (Block, Track, Stub, Turnout, Signal)):
+            self.blocks.append(block)
+        else:
+            raise TypeError(f'Attempt to add a \'{type(block).__name__}\' to the block list. Valid types are Block, Track, Stub, Turnout or Signal. Revise your code so that one of the correct types is added')
 
     def add_route(self, route):
-        self.routes.append(route)
+        if isinstance(route, Route):
+            self.routes.append(route)
+        else:
+            raise TypeError(f'Attempt to add a \'{type(route).__name__}\' to the Route list, revise your code so that the correct type is added')
 
     def add(self, item):
-        if isinstance(item, Route):
-            self.add_route(item)
+        if isinstance(item, (Route, Block, Track, Stub, Turnout, Signal)):
+            if isinstance(item, Route):
+                self.add_route(item)
+            else:
+                self.add_block(item)
         else:
-            self.add_block(item)
+            raise TypeError(f'Attempt to add a \'{type(item).__name__}\' to a layout. Valid types are Route, Block, Track, Stub, Turnout or Signal. Revise your code so that one of the correct types is added')
     
     def _make_block_buttons(blocks, block_buttons):
         for block in blocks:
